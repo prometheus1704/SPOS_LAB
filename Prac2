@@ -1,0 +1,108 @@
+import java.io.*;
+import java.util.*;
+
+public class MacroProcessor {
+
+    public static class Pass1 {
+        private List<String[]> mnt = new ArrayList<>();
+        private List<String> mdt = new ArrayList<>();
+        private Map<String, List<String>> ala = new LinkedHashMap<>();
+        private Map<String, List<String>> macroDefinitions = new LinkedHashMap<>();
+        private Map<String, Integer> mntIndexMap = new LinkedHashMap<>();
+        private boolean inMacroDefinition = false;
+        private String currentMacroName = null;
+
+        private int nextParamIndex = 1;
+        private Map<String, Map<String, Integer>> macroParamIndices = new LinkedHashMap<>();
+        private Map<String, Integer> macroStartIndices = new LinkedHashMap<>();
+        private List<String> macroOrder = new ArrayList<>();
+        private List<String> pass1Output = new ArrayList<>();
+
+        public void processSourceCode(List<String> sourceCode) {
+            for (String line : sourceCode) {
+                line = line.trim();
+
+                if (line.startsWith("MACRO")) {
+                    handleMacroStart(line);
+                } else if (line.equals("MEND")) {
+                    handleMacroEnd();
+                } else if (inMacroDefinition) {
+                    handleMacroInstruction(line);
+                } else {
+                    pass1Output.add(line);
+                }
+            }
+
+            if (inMacroDefinition) {
+                System.err.println("Warning: File ended while still inside a macro definition.");
+            }
+
+            updateMNTIndices();
+            adjustALAIndices();
+            substituteMDTParameters();
+
+            printMNT();
+            printMDT();
+            printALA();
+            printPass1Output();
+        }
+
+        private void handleMacroStart(String line) {
+            if (inMacroDefinition) {
+                System.err.println("Unexpected MACRO definition while already inside a macro definition.");
+                return;
+            }
+
+            inMacroDefinition = true;
+            String[] parts = line.split("\\s+");
+            if (parts.length < 2) {
+                System.err.println("Invalid MACRO definition: " + line);
+                return;
+            }
+
+            currentMacroName = parts[1];
+            List<String> params = Arrays.asList(parts).subList(2, parts.length);
+
+            macroOrder.add(currentMacroName);
+
+            int startIndex = nextParamIndex;
+            macroStartIndices.put(currentMacroName, startIndex);
+
+            Map<String, Integer> paramIndices = new LinkedHashMap<>();
+            int lastIndex = startIndex;
+
+            for (String param : params) {
+                if (!param.equals("&REG")) {
+                    paramIndices.put(param, lastIndex++);
+                }
+            }
+
+            if (params.contains("&REG")) {
+                paramIndices.put("&REG", lastIndex++);
+            }
+
+            nextParamIndex = lastIndex;
+
+            macroParamIndices.put(currentMacroName, paramIndices);
+
+            List<String> indexedParams = new ArrayList<>();
+            for (Map.Entry<String, Integer> entry : paramIndices.entrySet()) {
+                indexedParams.add(entry.getKey() + "=" + entry.getValue());
+            }
+            ala.put(currentMacroName, indexedParams);
+
+            macroDefinitions.put(currentMacroName, new ArrayList<>());
+            mntIndexMap.put(currentMacroName, mdt.size());
+        }
+
+        private void handleMacroEnd() {
+            if (!inMacroDefinition) {
+                System.err.println("MEND encountered without a matching MACRO definition.");
+                return;
+            }
+
+            inMacroDefinition = false;
+            if (currentMacroName != null) {
+                mdt.add("MEND");
+            }
+        }
