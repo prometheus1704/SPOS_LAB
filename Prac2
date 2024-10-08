@@ -106,3 +106,226 @@ public class MacroProcessor {
                 mdt.add("MEND");
             }
         }
+
+        private void handleMacroInstruction(String line) {
+            if (currentMacroName != null) {
+                macroDefinitions.get(currentMacroName).add(line);
+                mdt.add(line);
+            }
+        }
+
+        private void updateMNTIndices() {
+    int currentIndex = 1;
+    for (String macro : macroOrder) {
+        mnt.add(new String[]{macro, String.valueOf(currentIndex)});
+        currentIndex += getMacroLength(macro) + 1; // +1 for MEND
+    }
+}
+        private void adjustALAIndices() {
+            for (Map.Entry<String, List<String>> entry : ala.entrySet()) {
+                String macroName = entry.getKey();
+                List<String> params = entry.getValue();
+                Map<String, Integer> paramIndices = macroParamIndices.get(macroName);
+
+                List<String> updatedParams = new ArrayList<>();
+                for (String param : params) {
+                    String[] parts = param.split("=");
+                    String paramName = parts[0];
+                    int index = paramIndices.getOrDefault(paramName, -1);
+                    updatedParams.add(paramName + "=" + (index >= 0 ? index : nextParamIndex++));
+                }
+                ala.put(macroName, updatedParams);
+            }
+        }
+
+        private void substituteMDTParameters() {
+            List<String> updatedMDT = new ArrayList<>();
+
+            for (String line : mdt) {
+                String updatedLine = line;
+
+                if (line.equals("MEND")) {
+                    updatedMDT.add(line);
+                    continue;
+                }
+
+                for (Map.Entry<String, Map<String, Integer>> entry : macroParamIndices.entrySet()) {
+                    String macroName = entry.getKey();
+                    Map<String, Integer> paramIndices = entry.getValue();
+
+                    for (Map.Entry<String, Integer> paramEntry : paramIndices.entrySet()) {
+                        String paramName = paramEntry.getKey();
+                        Integer paramValue = paramEntry.getValue();
+                        updatedLine = updatedLine.replace(paramName, "#" + paramValue);
+                    }
+                }
+
+                updatedMDT.add(updatedLine);
+            }
+            mdt = updatedMDT;
+        }
+
+       private int getMacroLength(String macroName) {
+    List<String> macroLines = macroDefinitions.get(macroName);
+    return macroLines != null ? macroLines.size() + 1 : 1; // +1 for MEND
+}
+
+        private void printMNT() {
+            System.out.println("MNT:");
+            for (String[] entry : mnt) {
+                System.out.println("Macro: " + entry[0] + " Index: " + entry[1]);
+            }
+        }
+
+        private void printMDT() {
+            System.out.println("MDT:");
+            for (String entry : mdt) {
+                System.out.println(entry);
+            }
+        }
+
+        private void printALA() {
+            System.out.println("ALA:");
+            for (Map.Entry<String, List<String>> entry : ala.entrySet()) {
+                String macroName = entry.getKey();
+                List<String> params = entry.getValue();
+                System.out.print("Macro: " + macroName + " Parameters: {");
+                System.out.print(String.join(", ", params));
+                System.out.println("}");
+            }
+        }
+
+        private void printPass1Output() {
+            System.out.println("Pass 1 Output:");
+            for (String line : pass1Output) {
+                System.out.println(line);
+            }
+        }
+
+        public List<String[]> getMNT() {
+            return mnt;
+        }
+
+        public List<String> getMDT() {
+            return mdt;
+        }
+
+        public Map<String, List<String>> getALA() {
+            return ala;
+        }
+
+        public List<String> getPass1Output() {
+            return pass1Output;
+        }
+    }
+
+    public static class Pass2 {
+        private List<String[]> mnt;
+        private List<String> mdt;
+        private Map<String, List<String>> ala;
+        private List<String> expandedCode;
+
+        public Pass2(List<String[]> mnt, List<String> mdt, Map<String, List<String>> ala) {
+            this.mnt = mnt;
+            this.mdt = mdt;
+            this.ala = ala;
+            this.expandedCode = new ArrayList<>();
+        }
+
+        public void processSourceCode(List<String> sourceCode) {
+            for (String line : sourceCode) {
+                line = line.trim();
+                String[] parts = line.split("\\s+");
+                
+                if (isMacroCall(parts[0])) {
+                    expandMacro(parts);
+                } else {
+                    expandedCode.add(line);
+                }
+            }
+
+            printExpandedCode();
+        }
+
+        private boolean isMacroCall(String instruction) {
+            for (String[] entry : mnt) {
+                if (entry[0].equals(instruction)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void expandMacro(String[] macroCall) {
+            String macroName = macroCall[0];
+            int mdtIndex = getMDTIndex(macroName);
+            List<String> arguments = Arrays.asList(macroCall).subList(1, macroCall.length);
+
+            Map<String, String> paramMap = createParamMap(macroName, arguments);
+
+            for (int i = mdtIndex; i < mdt.size(); i++) {
+                String instruction = mdt.get(i);
+                if (instruction.equals("MEND")) {
+                    break;
+                }
+
+                for (Map.Entry<String, String> entry : paramMap.entrySet()) {
+                    instruction = instruction.replace("#" + entry.getKey(), entry.getValue());
+                }
+
+                expandedCode.add(instruction);
+            }
+        }
+
+        private int getMDTIndex(String macroName) {
+            for (String[] entry : mnt) {
+                if (entry[0].equals(macroName)) {
+                    return Integer.parseInt(entry[1]) - 1;
+                }
+            }
+            return -1;
+        }
+
+        private Map<String, String> createParamMap(String macroName, List<String> arguments) {
+            Map<String, String> paramMap = new HashMap<>();
+            List<String> parameters = ala.get(macroName);
+
+            for (int i = 0; i < parameters.size(); i++) {
+                String[] parts = parameters.get(i).split("=");
+                String paramName = parts[1];
+                String argValue = i < arguments.size() ? arguments.get(i) : "";
+                paramMap.put(paramName, argValue);
+            }
+
+            return paramMap;
+        }
+
+        private void printExpandedCode() {
+            System.out.println("Expanded Code:");
+            for (String line : expandedCode) {
+                System.out.println(line);
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        String fileName = "input_file.txt";
+        List<String> sourceCode = new ArrayList<>();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                sourceCode.add(line);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        Pass1 pass1 = new Pass1();
+        pass1.processSourceCode(sourceCode);
+
+        Pass2 pass2 = new Pass2(pass1.getMNT(), pass1.getMDT(), pass1.getALA());
+        pass2.processSourceCode(pass1.getPass1Output());
+    }
+}
