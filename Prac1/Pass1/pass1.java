@@ -12,10 +12,10 @@ public class pass1
                 OutputStream oo;
                 String input=null;
                 
-                String IS[]={"ADD","SUB","MUL","MOV"};
-                String UserReg[]={"AREG","BREG","CREG","DREG"};
-                String AD[]={"START","END"};
-                String DL[]={"DC","DS"};
+                String IS[]={"STOP","ADD","SUB","MUL","MOVER","MOVEM","COMP","BC","DIV","READ","PRINT"};
+                String UserReg[]={"AREG","BREG","CREG"};
+                String AD[]={"START","END","ORIGIN","EQU","LTORG"};
+                String DL[]={"DS","DC"};
                 int lc=0;
                 int scount=0,lcount=0;
                 int flag=0,flag2=0,stored=0;
