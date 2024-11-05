@@ -1,0 +1,82 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.HashMap;
+
+public class Main {
+    public static void main(String[] Args) {
+        // Using try-with-resources for automatic resource management
+        try (BufferedReader b1 = new BufferedReader(new FileReader("intermediate.txt"));
+             BufferedReader b2 = new BufferedReader(new FileReader("symtab.txt"));
+             BufferedReader b3 = new BufferedReader(new FileReader("littab.txt"));
+             FileWriter f1 = new FileWriter("pass1output.txt")) {
+
+            // HashMaps to store symbol and literal tables
+            HashMap<Integer, String> symAddr = new HashMap<>();
+            HashMap<Integer, String> litAddr = new HashMap<>();
+
+            String s;
+            int symtabPointer = 1, littabPointer = 1;
+
+            // Reading symbol table and storing values in HashMap with address
+            while ((s = b2.readLine()) != null) {
+                String[] word = s.split("\t+");
+                if (word.length >= 2) {
+                    symAddr.put(symtabPointer++, word[1]);
+                }
+            }
+
+            // Reading literal table and storing values in HashMap with address
+            while ((s = b3.readLine()) != null) {
+                String[] word = s.split("\t+");
+                if (word.length >= 2) {
+                    litAddr.put(littabPointer++, word[1]);
+                }
+            }
+
+            // Processing intermediate file and generating output
+            while ((s = b1.readLine()) != null) {
+                // Check for no-operation instruction
+                if (s.substring(1, 6).equalsIgnoreCase("IS,00")) {
+                    f1.write("+ 00 0 000\n");
+                } 
+                // Process IS instructions
+                else if (s.substring(1, 3).equalsIgnoreCase("IS")) {
+                    f1.write("+ " + s.substring(4, 6) + " ");
+                    int offset = 0;
+                    
+                    // Check if a register operand is present
+                    if (s.charAt(9) == ')') {
+                        f1.write(s.charAt(8) + " ");
+                        offset = 3;
+                    } else {
+                        f1.write("0 ");
+                    }
+
+                    // Determine if operand is symbol or literal
+                    char operandType = s.charAt(8 + offset);
+                    int operandIndex = Integer.parseInt(s.substring(10 + offset, s.length() - 1));
+
+                    if (operandType == 'S') {
+                        f1.write(symAddr.getOrDefault(operandIndex, "000") + "\n");
+                    } else if (operandType == 'L') {
+                        f1.write(litAddr.getOrDefault(operandIndex, "000") + "\n");
+                    }
+                } 
+                // Process DL (data) instructions with constant value
+                else if (s.substring(1, 6).equalsIgnoreCase("DL,01")) {
+                    String constantValue = s.substring(10, s.length() - 1);
+                    String paddedValue = String.format("%03d", Integer.parseInt(constantValue));
+                    f1.write("+ 00 0 " + paddedValue + "\n");
+                } 
+                // Handle all other cases, including empty lines
+                else {
+                    f1.write("\n");
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error while processing files: " + e.getMessage());
+        }
+    }
+}
